@@ -1,6 +1,8 @@
-    This is just an alpha version of transformming a latex file into a htmlPage. 
+    This is just an alpha version of transforming a latex file into a html page. 
     
-    For personal interest, the codes inside .tex file is transformed by pygment into a molokai style which can be nicely displayed in html, see my website:
+    For personal interest, the codes inside .tex file are transformed by pygment into a "molokai" style which can be nicely displayed in html, see my website:
+    
+        
 
-    When you encounter any problem, please email www.liu.zhenfeng@hotmail.com
+    When you encounter any problem, please email liu.zhenfeng@hotmail.com
 
