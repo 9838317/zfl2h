@@ -1,0 +1,180 @@
+#!/usr/bin/python3
+
+import sys
+import re
+import time
+import os
+from zflib import zfio
+readFileToLines = zfio.IO.readFileToLines
+readFileToString = zfio.IO.readFileToString
+
+
+class TexFileFrame(object):
+    def __init__(self, fileName):
+        self.fileName = fileName
+        self.lines    = []
+        self.markIndex= []
+        self.string   = ""
+        self.codeType = ""
+        self.codeStart= -1
+        self.codeEnd  = -1
+        
+        self.lines = readFileToLines(fileName)
+
+    # The method is to write the unpygmentized codes into the file, which can be further using os.system() to pygmentize it.
+    # Generating a file name "tempStrProcessing" string the unpygmentized codes.
+    @staticmethod
+    def loopCode(listArgs):
+        fs = open("tempStrProcessing", "w")
+        for i in listArgs[1:]:
+            fs.write(i)
+        fs.close()
+
+    # All the lines before \title will be discarded.
+    def processingTitle(self):      
+        for index, eachLineString in enumerate(self.lines):
+            print ("processing title")
+            title = re.findall("title{(.*)}", eachLineString)
+            if len(title) > 0:
+                title = title[0]
+                if title == "":
+                    title = "<h1>empty</h1>"
+                else:
+                    title = "<h1>"+ title + "</h1>"
+
+                # set the line following \title as the 1st line for processing convenience.
+                self.lines = self.lines [index + 1:]
+                self.string  += title + "\n"
+                print ("title is", title)
+                break
+
+    # Iterating all the lines after \title, the set is of course imcomplete, need to be further implemented. 
+    def processingBody(self):
+
+        index = -1
+        while index < len(self.lines) - 1:
+            index += 1
+            eachLineString = self.lines[index].rstrip()
+            print ("processing line :", index)
+
+            # skip \n, date, maketitle, begin-!=minted, end
+
+            # transform section, begin-minted
+            if eachLineString == "":
+                continue
+            if len(re.findall("date{(.*)}", eachLineString))  > 0:
+                print("get date, ",  re.findall("date{(.*)}", eachLineString))
+                continue
+            if len(re.findall("maketitle", eachLineString))  > 0:
+                #print("get maketitle, ",  re.findall("maketitle", eachLineString))
+                continue    
+            if len(re.findall("section\*{(.*)}", eachLineString))  > 0:
+                #print ("find section ", re.findall("section\*{(.*)}", eachLineString))
+                eachLineString = re.findall("section\*{(.*)}", eachLineString)[0]
+                self.string += ("<h3>" + eachLineString + "</h3>" + "\n")
+                continue
+            if len(re.findall("end{(.*)}", eachLineString))  > 0:
+                print("get end, continue")
+                continue
+            if len(re.findall("begin{(.*?)}", eachLineString))  > 0:
+                print ("get begin")
+                if re.findall("begin{(.*?)}", eachLineString)[0] != "minted":
+                    print ("not minted", re.findall("begin{(.*?)}", eachLineString))
+                    continue
+                else:
+                    print ("get minted")
+                    self.codeType = ""
+                    print(re.findall("begin{(.*?)}", eachLineString))
+                    assert  len( ((re.findall("begin{minted}{(.*)}", eachLineString)))) > 0
+
+                    print ("code type is ", re.findall("begin{minted}{(.*)}", eachLineString))
+                    self.codeType =re.findall("begin{minted}{(.*)}", eachLineString)[0].lower()
+
+                    
+                    self.codeStart = index
+                    print ("entering finding index loop, index is", index)
+
+                    # Here can be written as while(1). since self.codeEnd will only equal index when the end{minted} is found.
+                    while self.codeEnd < index:
+                        
+                        index += 1
+                        eachLineString = self.lines[index].rstrip()
+                        if len(re.findall("end{(.*?)}", eachLineString))  > 0:
+                            if re.findall("end{(.*?)}", eachLineString)[0] == "minted":
+                                print("index is ", index, re.findall("end{(.*?)}", eachLineString))
+                                self.codeEnd = index
+                                print ("quitting index loop, index is", index)
+                                print (self.lines[instance.codeStart:index])
+                                
+                                TexFileFrame.loopCode(self.lines[instance.codeStart:index])
+                                self.generateCodeString(instance.codeType)
+                                break
+                    continue 
+            print("making html code, index is:", index)
+            self.string += ("<p>" + eachLineString + "</p>" + "\n")
+
+    def generateCodeString(self, style):
+        command = "pygmentize -f html -l %s -O style=monokai -o stringtxt  tempStrProcessing"%style
+        os.system(command)
+        print("loading pygmentized string into string")
+        time.sleep(1)
+        self.string += readFileToString("stringtxt")
+
+
+    def writeFileToString(FileNamePara, stringPara):
+        if os.path.isfile(FileNamePara):
+            fs = open(FileNamePara, "a")
+        else:
+            fs = open(FileNamePara, "w")
+        
+        for i in stringPara:
+            fs.write(i)
+        fs.write("\n")
+        fs.close()
+
+        
+
+    def automation(self):
+
+
+        head = """<html>\n<head>\n<title></title>\n<meta content="" charset = "UTF-8">\n"""
+        style = "</head>\n\n<body>"
+        end = "</body>\n</html>"
+
+
+        self.processingTitle()
+        self.processingBody()  
+        
+        #TexFileFrame.writeFileToString("outputWithH1.html", head)
+        #TexFileFrame.writeFileToString("outputWithH1.html", style)
+        TexFileFrame.writeFileToString("outputWithH1.html", self.string)
+        #TexFileFrame.writeFileToString("outputWithH1.html", end)
+
+
+        fs = open("outputWithH1.html", "r")
+        lines = fs.readlines()
+        fs.close()
+
+        fs = open("outputWithoutH1.html", "w")
+        for i in lines[1:]:
+            fs.write(i)
+        fs.close()
+
+
+
+# end of class
+#____________________________________________________
+
+
+assert len(sys.argv) > 1
+fileName = sys.argv[1]
+
+instance = TexFileFrame(fileName)
+instance.automation()
+
+
+print("String is", instance.string)
+
+
+
+
