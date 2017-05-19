@@ -2,7 +2,8 @@
     
     For personal interest, the codes inside .tex file are transformed by pygment into a "molokai" style which can be nicely displayed in html, see my website:
     
-        
+
+    usage: ./zflib source.tex
 
     When you encounter any problem, please email liu.zhenfeng@hotmail.com
 

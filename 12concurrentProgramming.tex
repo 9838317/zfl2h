@@ -1,0 +1,185 @@
+\documentclass{article}
+\usepackage{CJKutf8}
+\usepackage{indentfirst}
+\usepackage{minted}
+\usepackage{color}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{csquotes}
+
+
+
+\definecolor{ff1111}{HTML}{FF1111}
+\definecolor{11ff11}{HTML}{11FF11}
+\definecolor{1111ff}{HTML}{1111FF}
+\newcommand{\ba}[1]
+{
+  \qquad \textbf{#1}
+}
+\newcommand{\bb}[1]
+{
+  \qquad\qquad \textbf{#1}
+}
+
+\title{Concurrent Programming}
+\date{}
+
+\begin{document}
+\begin{CJK}{UTF8}{gbsn}
+\maketitle
+
+    Here we begins to see the advantage of concurrent programming. In the previous chapter we implemented a web server that can only server a client at the same time. This is intolerant since you don't want you website to be dead to the second client when it is serving the first client. In this case, we need concurrent programming. 
+
+    Generally, concurrent programming has following advantages:
+
+    \qquad 1. reduce the disadvantage of slow I/O devices.
+
+    \qquad 2. allow client to initiate signal to the program. 
+
+    \qquad 3. serve multiple client.
+
+    \qquad 4. computing in parallel on multi-core CPU.
+
+    Let's start.
+
+\section*{Multiple process webserver}
+
+    The first idea is to build a multiple process webserver. Recall the procedure of a server includes: First we run the server to get the listening file descriptor to wait for any clients to connect. When there is a client socket enters, we accept the client socket and create a new file descriptor to communicate with the new file descriptor, which is the specific client. Finally we close the communication file descriptor and loop the accepting cycle. The pseudo code is as following:
+
+\begin{minted}{C}
+    int serverfd = getserverfd();
+    loop(forever)
+    {
+        int confd   = accept(args);
+        // Read and write confd;
+        // Close confd
+    }
+\end{minted}
+
+    Now assuming that there is a socket entering wanting the server to accept, if at this moment we first accept it and then call fork() to initiate a new process, then the new process will be able to response the requests from the new socket, and we can keep the father process continue to wait for accepting another new socket. Let's assume that we've acccept a new socket. 
+
+    1. At this point, we have 2 file descriptor, one is the serverfd for listening, the other is the confd for connection(lets assume that they are respectively 3 and 4).
+
+    2. Then we call fork(). There will be 2 processess here, one is each sharing the file descriptors. We just want the father process to listen, and the son process to handle the request, so we need to close the file descriptor 4 in the father process while close the file descriptor 3 in the son process, and in the son process we don't want it to loop forever, so we need to explicitly call exit(0) to end the son process. In this case, we have the following codes:
+
+\begin{minted}{C}
+    loop(forever)
+    {
+        int confd = accept(args);
+        int pid = fork();
+        if (pid == 0)
+        {
+            close(serverfd);
+            // Read and write(confd);
+            close(confd);
+            exit(0);
+        }
+        if (pid != 0)
+        {
+            close(confd);
+        }
+    }
+\end{minted}
+
+    The above codes can be more compact as following:
+
+\begin{minted}{C}
+    loop(forever)
+    {
+        int confd = accept(args);
+        if (fork() == 0)
+        {
+            close(serverfd);
+            // Read and write(confd);
+            close(confd);
+            exit(0);
+        }
+        close(confd);
+    }
+\end{minted}
+
+    This is the first model of concurrent programming. Next we will learn multiple process webserver.
+
+\section*{Multiple thread webserver}
+
+    With multiple process programming, each process has its own independent address space, which makes it difficult for processes to share data. So here we introduce another model, which is multiple thread programming. Before that, first we see the definition of thread from CSAPP.
+
+\begin{displayquote}
+    Threads are logical flows that run in the context of a single process and are scheduled by the kernel. You can think of threads as a hybrid of the
+other two approaches, scheduled by the kernel like process flows, and sharing the same virtual address space like I/O multiplexing flows.
+\end{displayquote}
+
+    In short, thread is like multiple process programming which utilizes the CPU efficiently, but it also allows the "processes"(thread) to share the same virtual memory space, which reduces the programming complexity.
+
+\section*{Creating a thread}
+
+    At the very beginning, by ignoring the variable sharing, we can just focus on the execution of a thread, and treat it like creating a new process. In order to create a new thread, we need to use the function pthread\_create():
+
+\begin{minted}{C}
+    pthread_t newTid;
+    pthread_create(&newTid, NULL, (void* )&function, NULL);
+\end{minted}
+
+    The third argument of the pthread\_create tunction is a casted pointer to a function, so we can directly using a function identifier, also we can just put a function pointer there.
+
+\begin{minted}{C}
+    (returnType)(*functionPointer)(type arg1)(...)(type argk);
+    functionPointer = function;
+    pthread_create(&newTid, NULL, (void* )functionPointer, NULL);
+
+    // or
+
+    pthread_create(&newTid, NULL, (void* )&function, NULL);
+\end{minted}
+
+    Let's stop to digest why we want to use a new process or a new thread. It is to maximize the utilization of CPU. When there is a slow I/O, or a need to concurrently perform something, then we need concurrent programming. multiple models, including process, I/O multiplexing, thread can all make it. With multiple processes, when we call fork(), system allocated a new independent address space to create a totally new process, and all the codes after fork() will be automatically executed. Comparing with multiple processes, in order to use thread, we need to wrap all the codes that we want to concurrently execute inside a function, and then pass the function address to pthread\_create to fire a new thread. Just like what we did previously. Then we call pthrea\_join to suspend the execution of the main thread in order for the new thread to execute.(so at this point we can also call sleep() to suspend main thread). In general, what we can do is:
+
+\begin{minted}{javascript}
+    pthread_create(&newTid, NULL, (void* )functionPointer, NULL);
+    pthread_join(newtid, NULL);
+\end{minted}
+
+    With the help of another thread, now we can implement a multiple thread server.
+
+\section*{multiple thread webserber}
+
+    Recall what we do to create a server is
+
+\begin{minted}{C}
+    // get a file descriptor that listening the PORT.  
+    int fdforserver = getserverfd(PORT); 
+    loop(forever)
+    {
+    int confd = accept(args);
+        write(confd);
+        read (confd);
+        close(confd)
+    }
+\end{minted}
+
+    So we can create a new thread to handle this, the code becomes:
+
+\begin{minted}{C}
+
+    void handleConfd(int confd)
+    {
+        write(confd);
+        read (confd);
+        close(confd)
+    }
+
+
+    // get a file descriptor that listening the PORT.  
+    int fdForServer = getserverfd(PORT); 
+    loop(forever)
+    {
+        int confd = accept(fdForServer, args);
+        pthread_t newTid;
+        pthread_create(&newtid, NULL, &handleConfd, NULL);
+    }
+\end{minted}
+
+    That's it.
+
+\end{CJK}
+\end{document}
